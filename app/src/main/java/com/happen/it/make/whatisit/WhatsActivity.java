@@ -1,10 +1,14 @@
 package com.happen.it.make.whatisit;
 
+import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.AsyncTask;
+import android.os.Environment;
+import android.provider.MediaStore;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.view.Menu;
@@ -14,9 +18,12 @@ import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.TextView;
 
+import java.io.File;
 import java.io.FileNotFoundException;
+import java.io.IOException;
 import java.io.InputStream;
-import java.util.List;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 
 public class WhatsActivity extends AppCompatActivity {
 
@@ -25,6 +32,9 @@ public class WhatsActivity extends AppCompatActivity {
     private Bitmap bitmap;
     private Bitmap processedBitmap;
     private Button identifyButton;
+    private SharedPreferences sharedPreferences;
+    private String currentPhotoPath;
+    private static final String PREF_USE_CAMERA_KEY = "USE_CAMERA";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -33,6 +43,7 @@ public class WhatsActivity extends AppCompatActivity {
         identifyButton = (Button)findViewById(R.id.identify_button);
         inputImageView = (ImageView)findViewById(R.id.tap_to_add_image);
         resultTextView = (TextView)findViewById(R.id.result_text);
+        sharedPreferences = getSharedPreferences("Picture Pref", Context.MODE_PRIVATE);
 
         identifyButton.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -70,11 +81,54 @@ public class WhatsActivity extends AppCompatActivity {
                 if (v != inputImageView) {
                     return;
                 }
-                final Intent photoPickerIntent = new Intent(Intent.ACTION_PICK);
-                photoPickerIntent.setType("image/*");
-                startActivityForResult(photoPickerIntent, Constants.SELECT_PHOTO_CODE);
+                final boolean useCamera = sharedPreferences.getBoolean(PREF_USE_CAMERA_KEY, false);
+                if (useCamera) {
+                    dispatchTakePictureIntent();
+                } else {
+                    final Intent photoPickerIntent = new Intent(Intent.ACTION_PICK);
+                    photoPickerIntent.setType("image/*");
+                    startActivityForResult(photoPickerIntent, Constants.SELECT_PHOTO_CODE);
+                }
             }
         });
+    }
+
+    private void dispatchTakePictureIntent() {
+        Intent takePictureIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+        // Ensure that there's a camera activity to handle the intent
+        if (takePictureIntent.resolveActivity(getPackageManager()) != null) {
+            // Create the File where the photo should go
+            File photoFile = null;
+            try {
+                photoFile = createImageFile();
+            } catch (IOException ex) {
+                ex.printStackTrace();
+                return;
+            }
+            // Continue only if the File was successfully created
+            if (photoFile != null) {
+                takePictureIntent.putExtra(MediaStore.EXTRA_OUTPUT,
+                        Uri.fromFile(photoFile));
+                startActivityForResult(takePictureIntent, Constants.CAPTURE_PHOTO_CODE);
+            }
+        }
+    }
+
+    private File createImageFile() throws IOException {
+        // Create an image file name
+        String timeStamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
+        String imageFileName = "JPEG_" + timeStamp + "_";
+        File storageDir = Environment.getExternalStoragePublicDirectory(
+                Environment.DIRECTORY_PICTURES);
+        File image = File.createTempFile(
+                imageFileName,  /* prefix */
+                ".jpg",         /* suffix */
+                storageDir      /* directory */
+        );
+
+        // Save a file: path for use with ACTION_VIEW intents
+        currentPhotoPath = image.getAbsolutePath();
+        return image;
     }
 
     @Override
@@ -100,7 +154,11 @@ public class WhatsActivity extends AppCompatActivity {
         int id = item.getItemId();
 
         //noinspection SimplifiableIfStatement
-        if (id == R.id.action_settings) {
+        if (id == R.id.action_use_camera) {
+            sharedPreferences.edit().putBoolean(PREF_USE_CAMERA_KEY, true).apply();
+            return true;
+        } else if (id == R.id.action_use_gallery) {
+            sharedPreferences.edit().putBoolean(PREF_USE_CAMERA_KEY, false).apply();
             return true;
         }
 
@@ -125,6 +183,14 @@ public class WhatsActivity extends AppCompatActivity {
                     }
 
                 }
+                break;
+            case Constants.CAPTURE_PHOTO_CODE:
+                if (resultCode == RESULT_OK) {
+                    bitmap = BitmapFactory.decodeFile(currentPhotoPath);
+                    processedBitmap = processBitmap(bitmap);
+                    inputImageView.setImageBitmap(bitmap);
+                }
+                break;
         }
     }
 

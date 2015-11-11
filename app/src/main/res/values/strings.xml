@@ -4,4 +4,6 @@
     <string name="default_nothing">Nothing</string>
     <string name="action_settings">Settings</string>
     <string name="identify_button_text">What is this?</string>
+    <string name="action_use_gallery">Use Gallery</string>
+    <string name="action_use_camera">Use Camera</string>
 </resources>
